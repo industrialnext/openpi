@@ -132,6 +132,10 @@ def create_torch_dataset(
 ) -> Dataset:
     """Create a dataset for training."""
     repo_id = data_config.repo_id
+    if data_config.taro_config_name is not None:
+        from openpi.training.taro_dataset import TaroDataset
+
+        return TaroDataset(data_config.taro_config_name)
     if repo_id is None:
         raise ValueError("Repo ID is not set. Cannot create dataset.")
     if repo_id == "fake":
@@ -240,6 +244,8 @@ def create_data_loader(
         framework: The framework to use ("jax" or "pytorch").
     """
     data_config = config.data.create(config.assets_dirs, config.model)
+    if data_config.taro_config_name is not None and framework != "jax":
+        raise ValueError("Masked Taro training is supported by the JAX trainer only")
     logging.info(f"data_config: {data_config}")
 
     if data_config.rlds_data_dir is not None:
@@ -530,6 +536,7 @@ class RLDSDataLoader:
 class DataLoaderImpl(DataLoader):
     def __init__(self, data_config: _config.DataConfig, data_loader: TorchDataLoader | RLDSDataLoader):
         self._data_config = data_config
+        self.last_pool_ids = None
         self._data_loader = data_loader
 
     def data_config(self) -> _config.DataConfig:
@@ -537,4 +544,9 @@ class DataLoaderImpl(DataLoader):
 
     def __iter__(self):
         for batch in self._data_loader:
-            yield _model.Observation.from_dict(batch), batch["actions"]
+            self.last_pool_ids = np.asarray(batch["taro_pool_id"]) if "taro_pool_id" in batch else None
+            observation = _model.Observation.from_dict(batch)
+            if "action_loss_mask" in batch:
+                yield observation, batch["actions"], batch["action_loss_mask"]
+            else:
+                yield observation, batch["actions"]

@@ -1,3 +1,5 @@
+import dataclasses
+import json
 import logging
 import os
 import pathlib
@@ -45,6 +47,26 @@ def create_trained_policy(
     repack_transforms = repack_transforms or transforms.Group()
     checkpoint_dir = download.maybe_download(str(checkpoint_dir))
 
+    taro = isinstance(train_config.data, _config.TaroDataConfig)
+    if taro:
+        from openpi.shared import taro_contract
+        from openpi.training.taro_receipts import verify_assets
+
+        assets = checkpoint_dir / "assets" / train_config.data.assets.asset_id
+        profile = json.loads((assets / "profile.json").read_text())
+        taro_contract.validate_profile(profile)
+        if taro_contract.training_contract(profile) != taro_contract.training_contract(
+            taro_contract.load_profile(train_config.name)
+        ):
+            raise ValueError("Checkpoint and selected Taro profile differ")
+        verify_assets(assets, profile)
+        if norm_stats is not None:
+            raise ValueError("Taro serving must use the checkpoint normalization")
+        train_config = dataclasses.replace(
+            train_config,
+            model=dataclasses.replace(train_config.model, tokenizer_path=str(assets / "paligemma_tokenizer.model")),
+        )
+
     # Check if this is a PyTorch model by looking for model.safetensors
     weight_path = os.path.join(checkpoint_dir, "model.safetensors")
     is_pytorch = os.path.exists(weight_path)
@@ -72,7 +94,7 @@ def create_trained_policy(
         except ImportError:
             pytorch_device = "cpu"
 
-    return _policy.Policy(
+    policy = _policy.Policy(
         model,
         transforms=[
             *repack_transforms.inputs,
@@ -92,3 +114,9 @@ def create_trained_policy(
         is_pytorch=is_pytorch,
         pytorch_device=pytorch_device if is_pytorch else None,
     )
+
+    if taro:
+        from openpi.policies.taro_policy import TaroPolicy
+
+        return TaroPolicy(policy)
+    return policy

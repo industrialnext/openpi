@@ -4,3 +4,6 @@
 [submodule "third_party/libero"]
 	path = third_party/libero
 	url = https://github.com/Lifelong-Robot-Learning/LIBERO.git
+[submodule "packages/industrialnext_rpc"]
+	path = packages/industrialnext_rpc
+	url = git@github.com:industrialnext/industrialnext_rpc.git

@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 
 import jax
 import numpy as np
@@ -12,10 +13,15 @@ import openpi.shared.download as download
 
 
 class PaligemmaTokenizer:
-    def __init__(self, max_len: int = 48):
+    def __init__(self, max_len: int = 48, *, local_path: str | None = None, strict_length: bool = False):
         self._max_len = max_len
+        self._strict_length = strict_length
 
-        path = download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        path = (
+            pathlib.Path(local_path)
+            if local_path
+            else download.maybe_download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        )
         with path.open("rb") as f:
             self._tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
@@ -38,6 +44,8 @@ class PaligemmaTokenizer:
             tokens = tokens + padding
         else:
             if len(tokens) > self._max_len:
+                if self._strict_length:
+                    raise ValueError(f"Taro prompt/state requires {len(tokens)} tokens, limit {self._max_len}")
                 logging.warning(
                     f"Token length ({len(tokens)}) exceeds max length ({self._max_len}), truncating. "
                     "Consider increasing the `max_token_len` in your model config if this happens frequently."

@@ -88,6 +88,13 @@ def create_rlds_dataloader(
 
 def main(config_name: str, max_frames: int | None = None):
     config = _config.get_config(config_name)
+    if isinstance(config.data, _config.TaroDataConfig):
+        from openpi.training.taro_stats import compute
+
+        if max_frames is not None:
+            raise ValueError("Taro statistics require the full admitted training index")
+        compute(config)
+        return
     data_config = config.data.create(config.assets_dirs, config.model)
 
     if data_config.rlds_data_dir is not None:

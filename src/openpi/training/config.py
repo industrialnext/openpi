@@ -20,6 +20,8 @@ import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
+import openpi.policies.taro_policy as taro_policy
+from openpi.shared import taro_contract
 import openpi.shared.download as _download
 import openpi.shared.normalize as _normalize
 import openpi.training.droid_rlds_dataset as droid_rlds_dataset
@@ -63,6 +65,7 @@ class AssetsConfig:
 
 @dataclasses.dataclass(frozen=True)
 class DataConfig:
+    taro_config_name: str | None = None
     # LeRobot repo id. If None, fake data will be created.
     repo_id: str | None = None
     # Directory within the assets directory containing the data assets.
@@ -130,10 +133,14 @@ class ModelTransformFactory(GroupFactory):
                         _transforms.InjectDefaultPrompt(self.default_prompt),
                         _transforms.ResizeImages(224, 224),
                         _transforms.TokenizePrompt(
-                            _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
+                            _tokenizer.PaligemmaTokenizer(
+                                model_config.max_token_len,
+                                local_path=model_config.tokenizer_path,
+                                strict_length=model_config.strict_token_length,
+                            ),
                             discrete_state_input=model_config.discrete_state_input,
                         ),
-                        _transforms.PadStatesAndActions(model_config.action_dim),
+                        _transforms.PadStatesAndActions(model_config.action_dim, model_config.state_dim),
                     ],
                 )
             case _model.ModelType.PI0_FAST:
@@ -459,6 +466,24 @@ class LeRobotDROIDDataConfig(DataConfigFactory):
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class TaroDataConfig(DataConfigFactory):
+    config_name: str = "pi05_taro_exp_100"
+
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        profile = taro_contract.load_profile(self.config_name)
+        model_transforms = ModelTransformFactory()(model_config)
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            taro_config_name=profile["config_name"],
+            data_transforms=_transforms.Group(inputs=[taro_policy.TaroInputs()], outputs=[taro_policy.TaroOutputs()]),
+            model_transforms=_transforms.Group(
+                inputs=[*model_transforms.inputs, taro_policy.SanitizeMaskedActions()],
+                outputs=model_transforms.outputs,
+            ),
         )
 
 
@@ -969,6 +994,40 @@ _CONFIGS = [
     *roboarena_config.get_roboarena_configs(),
     *polaris_config.get_polaris_configs(),
 ]
+
+for _variant in ("100", "full"):
+    _name = f"pi05_taro_exp_{_variant}"
+    _CONFIGS.append(
+        TrainConfig(
+            name=_name,
+            model=pi0_config.Pi0Config(
+                pi05=True,
+                discrete_state_input=True,
+                state_dim=38,
+                action_dim=32,
+                action_horizon=40,
+                max_token_len=256,
+                strict_token_length=True,
+                tokenizer_path=str(taro_contract.REPOSITORY_ROOT / "assets/taro/paligemma_tokenizer.model"),
+            ),
+            data=TaroDataConfig(repo_id=_name, config_name=_name, assets=AssetsConfig(asset_id=_name)),
+            weight_loader=weight_loaders.CheckpointWeightLoader(
+                str(taro_contract.REPOSITORY_ROOT / "assets/pi05_base/params")
+            ),
+            batch_size=64,
+            num_workers=4,
+            seed=42,
+            num_train_steps=15000,
+            ema_decay=0.999,
+            lr_schedule=_optimizer.CosineDecaySchedule(
+                warmup_steps=750, peak_lr=2.5e-5, decay_steps=15000, decay_lr=2.5e-6
+            ),
+            optimizer=_optimizer.AdamW(),
+            wandb_enabled=False,
+            fsdp_devices=2,
+        )
+    )
+
 
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
     raise ValueError("Config names must be unique.")

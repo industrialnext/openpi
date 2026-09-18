@@ -74,6 +74,10 @@ def save_state(
         norm_stats = data_config.norm_stats
         if norm_stats is not None and data_config.asset_id is not None:
             _normalize.save(directory / data_config.asset_id, norm_stats)
+        if data_config.taro_config_name is not None:
+            from openpi.training.taro_receipts import checkpoint_assets
+
+            checkpoint_assets(directory, data_config.taro_config_name, checkpoint_manager.directory, step + 1)
 
     # Split params that can be used for inference into a separate item.
     with at.disable_typechecking():

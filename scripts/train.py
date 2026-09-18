@@ -138,7 +138,7 @@ def train_step(
     config: _config.TrainConfig,
     rng: at.KeyArrayLike,
     state: training_utils.TrainState,
-    batch: tuple[_model.Observation, _model.Actions],
+    batch: tuple,
 ) -> tuple[training_utils.TrainState, dict[str, at.Array]]:
     model = nnx.merge(state.model_def, state.params)
     model.train()
@@ -147,11 +147,12 @@ def train_step(
     def loss_fn(
         model: _model.BaseModel, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions
     ):
-        chunked_loss = model.compute_loss(rng, observation, actions, train=True)
+        kwargs = {"action_loss_mask": batch[2]} if len(batch) == 3 else {}
+        chunked_loss = model.compute_loss(rng, observation, actions, train=True, **kwargs)
         return jnp.mean(chunked_loss)
 
     train_rng = jax.random.fold_in(rng, state.step)
-    observation, actions = batch
+    observation, actions = batch[:2]
 
     # Filter out frozen params.
     diff_state = nnx.DiffState(0, config.trainable_filter)
@@ -188,6 +189,8 @@ def train_step(
         "grad_norm": optax.global_norm(grads),
         "param_norm": optax.global_norm(kernel_params),
     }
+    if len(batch) == 3:
+        info["valid_action_coordinates"] = jnp.sum(batch[2])
     return new_state, info
 
 
@@ -209,12 +212,22 @@ def main(config: _config.TrainConfig):
     data_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(sharding.DATA_AXIS))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
+    taro_receipt = None
+    if isinstance(config.data, _config.TaroDataConfig):
+        from openpi.training.taro_receipts import prepare_run
+
+        taro_receipt = prepare_run(config)
+
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint_dir(
         config.checkpoint_dir,
-        keep_period=config.keep_period,
+        keep_period=None if taro_receipt is not None else config.keep_period,
         overwrite=config.overwrite,
         resume=config.resume,
     )
+    if taro_receipt is not None:
+        from openpi.shared.taro_contract import atomic_json
+
+        atomic_json(config.checkpoint_dir / "run_receipt.json", taro_receipt)
     init_wandb(config, resuming=resuming, enabled=config.wandb_enabled)
 
     data_loader = _data_loader.create_data_loader(
@@ -237,6 +250,10 @@ def main(config: _config.TrainConfig):
     jax.block_until_ready(train_state)
     logging.info(f"Initialized train state:\n{training_utils.array_tree_to_info(train_state.params)}")
 
+    logging.info(
+        "Trainable parameters: %d",
+        sum(x.size for x in jax.tree.leaves(train_state.params.filter(config.trainable_filter))),
+    )
     if resuming:
         train_state = _checkpoints.restore_state(checkpoint_manager, train_state, data_loader)
 
@@ -256,21 +273,49 @@ def main(config: _config.TrainConfig):
     )
 
     infos = []
+    pool_exposure = np.zeros(5, dtype=np.int64)
     for step in pbar:
         with sharding.set_mesh(mesh):
             train_state, info = ptrain_step(train_rng, train_state, batch)
+        if taro_receipt is not None:
+            pool_exposure += np.bincount(data_loader.last_pool_ids, minlength=5)
         infos.append(info)
         if step % config.log_interval == 0:
             stacked_infos = common_utils.stack_forest(infos)
             reduced_info = jax.device_get(jax.tree.map(jnp.mean, stacked_infos))
             info_str = ", ".join(f"{k}={v:.4f}" for k, v in reduced_info.items())
             pbar.write(f"Step {step}: {info_str}")
+            if taro_receipt is not None:
+                from openpi.training.taro_dataset import POOLS
+
+                atomic_json(
+                    config.checkpoint_dir / "metrics.json",
+                    {
+                        "completed_updates": step + 1,
+                        "metrics": {k: float(v) for k, v in reduced_info.items()},
+                        "pool_exposure_since_start": dict(zip(POOLS, pool_exposure.tolist(), strict=True)),
+                        "resumed_at_completed_update": start_step,
+                    },
+                )
             wandb.log(reduced_info, step=step)
             infos = []
         batch = next(data_iter)
 
-        if (step % config.save_interval == 0 and step > start_step) or step == config.num_train_steps - 1:
+        periodic_save = (
+            (step + 1) % config.save_interval == 0
+            if taro_receipt is not None
+            else step % config.save_interval == 0 and step > start_step
+        )
+        if periodic_save or step == config.num_train_steps - 1:
             _checkpoints.save_state(checkpoint_manager, train_state, data_loader, step)
+            if taro_receipt is not None and (
+                (config.keep_period is not None and (step + 1) % config.keep_period == 0)
+                or step == config.num_train_steps - 1
+            ):
+                from openpi.training.taro_receipts import archive_comparison
+
+                checkpoint_manager.wait_until_finished()
+                archive_comparison(config.checkpoint_dir, step)
 
     logging.info("Waiting for checkpoint manager to finish")
     checkpoint_manager.wait_until_finished()

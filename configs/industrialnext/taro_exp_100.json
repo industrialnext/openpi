@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "name": "taro_exp_100",
+  "config_name": "pi05_taro_exp_100",
+  "representation_version": "taro_relative_se3_rows_20d_v1",
+  "state_dim": 38,
+  "action_dim": 29,
+  "model_action_dim": 32,
+  "action_horizon": 40,
+  "target_offset": 0,
+  "fps": 50,
+  "task_catalog": {
+    "flexiv_taro_conveyor_belt_pnp": "Wait for a target object on the conveyor belt to come within reach, then approach and firmly grasp it with the hand, sort it by color, and drop it into the matching box."
+  },
+  "hand_coordinate_names": [
+    "r_thumb_cmc_flex",
+    "r_thumb_cmc_abd",
+    "r_thumb_mcp",
+    "r_thumb_ip",
+    "r_index_finger_mcp_flex",
+    "r_index_finger_mcp_abd",
+    "r_index_finger_pip",
+    "r_index_finger_dip",
+    "r_middle_finger_mcp_flex",
+    "r_middle_finger_mcp_abd",
+    "r_middle_finger_pip",
+    "r_middle_finger_dip",
+    "r_ring_finger_mcp_flex",
+    "r_ring_finger_mcp_abd",
+    "r_ring_finger_pip",
+    "r_ring_finger_dip",
+    "r_pinky_mcp_flex",
+    "r_pinky_mcp_abd",
+    "r_pinky_pip",
+    "r_pinky_dip"
+  ],
+  "state": [
+    {
+      "key": "left_eef",
+      "fields": [
+        "left_arm_pose_pos",
+        "left_arm_pose_rot"
+      ],
+      "rot6d": "source_columns_to_groot_rows"
+    },
+    {
+      "key": "right_eef",
+      "fields": [
+        "right_arm_pose_pos",
+        "right_arm_pose_rot"
+      ],
+      "rot6d": "source_columns_to_groot_rows"
+    },
+    {
+      "key": "right_hand",
+      "fields": [
+        "right_hand"
+      ]
+    }
+  ],
+  "action": [
+    {
+      "key": "right_eef",
+      "fields": [
+        "right_arm_pose_pos",
+        "right_arm_pose_rot"
+      ],
+      "rot6d": "source_columns_to_groot_rows",
+      "rep": "RELATIVE",
+      "type": "EEF",
+      "format": "XYZ_ROT6D",
+      "state_key": "right_eef"
+    },
+    {
+      "key": "right_hand",
+      "fields": [
+        "right_hand"
+      ],
+      "rep": "ABSOLUTE",
+      "type": "NON_EEF",
+      "format": "DEFAULT"
+    }
+  ],
+  "cameras": {
+    "head": "view0_rgb",
+    "left_wrist": "view1_rgb",
+    "right_wrist": "view2_rgb"
+  },
+  "serving": {
+    "profile": "taro",
+    "host": "127.0.0.1",
+    "port": 10012,
+    "control_hz": 50,
+    "image_size": [
+      256,
+      256
+    ],
+    "rtc_mode": "off",
+    "supported_rtc_modes": [
+      "off"
+    ],
+    "action_offset": 2,
+    "ensemble_strategy": "temporal_exponential",
+    "ensemble_coeff": 0.1,
+    "max_ensemble_chunks": 3,
+    "chunk_transition_frames": 4,
+    "control_clock_mode": "elapsed_time",
+    "max_action_lateness_s": 0.04,
+    "max_control_clock_drift_s": 0.1,
+    "max_command_gap_s": 0.2,
+    "cameras": {
+      "head": "head_rgb",
+      "left_wrist": "eoat_left_top_fisheye_rgb",
+      "right_wrist": "eoat_right_top_fisheye_rgb"
+    },
+    "field_lengths": {
+      "left_arm_pose_pos": 3,
+      "left_arm_pose_rot": 6,
+      "right_arm_pose_pos": 3,
+      "right_arm_pose_rot": 6,
+      "right_hand": 20
+    },
+    "field_units": {
+      "left_arm_pose_pos": "m",
+      "left_arm_pose_rot": "rot6d_columns",
+      "right_arm_pose_pos": "m",
+      "right_arm_pose_rot": "rot6d_columns",
+      "right_hand": "native_joint"
+    },
+    "ignored_observation_keys": [
+      "head_depth",
+      "eoat_left_top_fisheye_depth",
+      "eoat_right_top_fisheye_depth",
+      "external_rgb",
+      "external_depth"
+    ],
+    "eef_frame": "per_arm_flexiv_base",
+    "gripper_action_keys": []
+  },
+  "data": {
+    "converted_root": "/mnt/nvme/data/training_data/gr00t/taro_exp_100",
+    "source_root": "/mnt/nvme/data/training_data/rgb_v5/taro_exp_100_rgb_v5",
+    "release_sha256": "d9516f686fde07f1640946914dd26893c8eefc0477396964c1a02437dc509885",
+    "frozen_sha256": "2dffa712c82b74789e893a81d3e748abf53301d13a88826ce8cbb7fea4526ff3",
+    "split_path": "/mnt/nvme/outputs/gr00t/preparation/taro_split.json",
+    "split_sha256": "de46c9f6b0bfd4749e8a7169782c7c6b8ce3c33d25b1d08036fa3ad59050c8a0",
+    "projection_sha256": "717e08b334cb194bab7ebee3bb87bdbed6813d9c05b488be01a436c104060350",
+    "historical_repository": "/home/azureuser/ws/Isaac-GR00T",
+    "historical_commit": "62394713ebad3dab6abb841697d565bf59e6fd24",
+    "historical_config": "configs/embodiments/taro_exp_100.yaml",
+    "prepared_root": "data/training_data/openpi/taro_exp_100",
+    "evaluation_root": "/mnt/nvme/data/training_data/gr00t/taro_exp_full"
+  }
+}

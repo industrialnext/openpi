@@ -44,6 +44,10 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/Physical-Intelligence/openpi"
 
+[project.optional-dependencies]
+industrialnext = ["industrialnext-rpc", "scipy>=1.12"]
+taro-audit = ["h5py>=3.11", "pyyaml>=6"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
@@ -66,6 +70,7 @@ rlds = [
 override-dependencies = ["ml-dtypes==0.4.1", "tensorstore==0.1.74"]
 
 [tool.uv.sources]
+industrialnext-rpc = { workspace = true }
 openpi-client = { workspace = true }
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "0cf864870cf29f4738d3ade893e6fd13fbd7cdb5" }
 dlimp = { git = "https://github.com/kvablack/dlimp", rev = "ad72ce3a9b414db2185bc0b38461d4101a65477a" }

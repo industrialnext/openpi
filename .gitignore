@@ -3,6 +3,13 @@ assets/
 checkpoints/
 data/
 wandb/
+/assets
+/checkpoints
+/data
+/outputs
+
+# Local planning and review documents.
+docs/local/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
