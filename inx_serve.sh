@@ -8,5 +8,7 @@ case "$variant" in
   *) echo 'Variant must be 100 or full' >&2; exit 2 ;;
 esac
 export HF_HUB_OFFLINE=1
+# Allocate GPU memory as needed, retaining the pool for inference reuse.
+export XLA_PYTHON_CLIENT_PREALLOCATE="${XLA_PYTHON_CLIENT_PREALLOCATE:-false}"
 export XLA_PYTHON_CLIENT_MEM_FRACTION="${XLA_PYTHON_CLIENT_MEM_FRACTION:-0.85}"
 exec .venv/bin/python scripts/serve_industrialnext.py --config-name "pi05_taro_exp_${variant}" "$@"
